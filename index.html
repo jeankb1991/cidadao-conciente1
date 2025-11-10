@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cidadão Consciente</title>
+  <meta name="theme-color" content="#0d6efd" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <header class="topo">
+    <div class="branding">
+      <span class="app-icon" aria-hidden="true">💡</span>
+      <h1>CIDADÃO CONSCIENTE</h1>
+    </div>
+    <h2>MALAQUIAS RIBEIRO DAMASCENO</h2>
+    <h3>SÃO LOURENÇO DO PIAUÍ</h3>
+    <p class="enunciado">
+      Aplicativo de participação cidadã para <strong>registrar problemas urbanos</strong> — como 
+      <strong>postes apagados</strong>, <strong>iluminação precária</strong> e <strong>áreas inseguras</strong>.
+      Capture uma foto, sua <strong>geolocalização é automática</strong> e a denúncia fica registrada no histórico.
+      <br><em>As denúncias são anônimas e não coletam dados pessoais.</em>
+    </p>
+  </header>
+
+  <main><center>
+    <section>
+      <h2>📸 TIRE UMA FOTO</h2>
+      <video id="camera" autoplay playsinline></video>
+      <p id="tipoCamera" class="indicador-camera">📷 Câmera: Traseira</p>
+      <div class="botoes-camera">
+        <button class="btn-primaria" onclick="tirarFoto()">Capturar Foto</button>
+        <button class="btn-secundaria" type="button" onclick="alternarCamera()">Trocar câmera</button>
+      </div>
+      <canvas id="foto" style="display:none;"></canvas>
+    </section></center>
+<center>
+    <section>
+      <h2>📍 SUA LOCALIZAÇÃO</h2>
+      <div id="map"></div>
+    </section></center>
+<center>
+    <section>
+      <h2>📝 DENÚNCIA</h2>
+      <form id="denunciaForm" onsubmit="registrarDenuncia(); return false;">
+        <textarea id="descricao" placeholder="Descreva o problema (ex.: poste apagado na Rua X, perto do número Y)..."></textarea>
+        <div class="linha-form">
+          <label for="whats" class="lbl">Número do WhatsApp (opcional)</label>
+          <input type="tel" id="whats" inputmode="tel" placeholder="+55 DDD número (ex.: +5585999999999)" />
+        </div>
+        <div class="botoes-form">
+          <button type="submit" class="btn-secundaria">Registrar Denúncia</button>
+          <button type="button" class="btn-primaria" onclick="enviarWhatsApp()">Enviar pelo WhatsApp</button>
+        </div>
+      </form>
+    </section></center>
+<center>
+    <section class="historico">
+      <h2>📋 HISTÓRICO DE DENÚNCIAS</h2>
+      <ul id="listaDenuncias"></ul>
+    </section></center>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 — Projeto <strong>Cidadão Consciente</strong>. <br>Denúncias anônimas com foco em melhoria pública.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
