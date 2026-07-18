@@ -1,73 +1,216 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cidadão Consciente</title>
-  <meta name="theme-color" content="#0d6efd" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cidadão Consciente — Denúncias Urbanas</title>
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="description"
+    content="Aplicativo de participação cidadã para registrar problemas urbanos como postes apagados, buracos, focos de dengue e mato alto." />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css"/>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap"
+    rel="stylesheet">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <header class="topo">
+  <header class="topo glass-panel">
     <div class="branding">
-      <span class="app-icon" aria-hidden="true">💡</span>
-      <h1>CIDADÃO CONSCIENTE</h1>
+      <div class="icon-pulse">
+        <span class="app-icon" aria-hidden="true">🏙️</span>
+      </div>
+      <div>
+        <h1>Cidadão Consciente</h1>
+        <p class="subtitle">Voz da Cidade</p>
+      </div>
     </div>
-    <h2>MALAQUIAS RIBEIRO DAMASCENO</h2>
-    <h3>SÃO LOURENÇO DO PIAUÍ</h3>
     <p class="enunciado">
-      Aplicativo de participação cidadã para <strong>registrar problemas urbanos</strong> — como 
-      <strong>postes apagados</strong>, <strong>iluminação precária</strong> e <strong>áreas inseguras</strong>.
-      Capture uma foto, sua <strong>geolocalização é automática</strong> e a denúncia fica registrada no histórico.
-      <br><em>As denúncias são anônimas e não coletam dados pessoais.</em>
+      Ajude a cuidar da nossa cidade. Registre <strong>postes apagados, buracos, focos de dengue e falta de
+        roço</strong>.
+      Sua geolocalização é coletada automaticamente.
+      <br><span class="highlight">100% anônimo e seguro.</span>
     </p>
   </header>
 
-  <main><center>
-    <section>
-      <h2>📸 TIRE UMA FOTO</h2>
-      <video id="camera" autoplay playsinline></video>
-      <p id="tipoCamera" class="indicador-camera">📷 Câmera: Traseira</p>
-      <div class="botoes-camera">
-        <button class="btn-primaria" onclick="tirarFoto()">Capturar Foto</button>
-        <button class="btn-secundaria" type="button" onclick="alternarCamera()">Trocar câmera</button>
+  <main>
+    <section class="dashboard">
+      <div class="stat-card">
+        <div class="stat-icon lamp">🔦</div>
+        <div class="stat-info">
+          <span class="stat-val" id="count-poste">0</span>
+          <span class="stat-label">Postes</span>
+        </div>
       </div>
-      <canvas id="foto" style="display:none;"></canvas>
-    </section></center>
-<center>
-    <section>
-      <h2>📍 SUA LOCALIZAÇÃO</h2>
-      <div id="map"></div>
-    </section></center>
-<center>
-    <section>
-      <h2>📝 DENÚNCIA</h2>
-      <form id="denunciaForm" onsubmit="registrarDenuncia(); return false;">
-        <textarea id="descricao" placeholder="Descreva o problema (ex.: poste apagado na Rua X, perto do número Y)..."></textarea>
-        <div class="linha-form">
-          <label for="whats" class="lbl">Número do WhatsApp (opcional)</label>
-          <input type="tel" id="whats" inputmode="tel" placeholder="+55 DDD número (ex.: +5585999999999)" />
+      <div class="stat-card">
+        <div class="stat-icon hole">🕳️</div>
+        <div class="stat-info">
+          <span class="stat-val" id="count-buraco">0</span>
+          <span class="stat-label">Buracos</span>
         </div>
-        <div class="botoes-form">
-          <button type="submit" class="btn-secundaria">Registrar Denúncia</button>
-          <button type="button" class="btn-primaria" onclick="enviarWhatsApp()">Enviar pelo WhatsApp</button>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon bug">🦟</div>
+        <div class="stat-info">
+          <span class="stat-val" id="count-dengue">0</span>
+          <span class="stat-label">Dengue</span>
         </div>
-      </form>
-    </section></center>
-<center>
-    <section class="historico">
-      <h2>📋 HISTÓRICO DE DENÚNCIAS</h2>
-      <ul id="listaDenuncias"></ul>
-    </section></center>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon leaf">🌿</div>
+        <div class="stat-info">
+          <span class="stat-val" id="count-mato">0</span>
+          <span class="stat-label">Roço</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="form-container">
+      <section class="form-section category-selection">
+        <h2><span class="sec-icon">1</span> Qual é o problema?</h2>
+        <div class="categories-grid" id="categoryGrid">
+          <div class="category-card" data-category="poste">
+            <div class="cat-icon lamp">🔦</div>
+            <span>Poste Apagado</span>
+          </div>
+          <div class="category-card" data-category="buraco">
+            <div class="cat-icon hole">🕳️</div>
+            <span>Buraco na Via</span>
+          </div>
+          <div class="category-card" data-category="dengue">
+            <div class="cat-icon bug">🦟</div>
+            <span>Foco de Dengue</span>
+          </div>
+          <div class="category-card" data-category="mato">
+            <div class="cat-icon leaf">🌿</div>
+            <span>Falta de Roço</span>
+          </div>
+          <div class="category-card" data-category="outro">
+            <div class="cat-icon alert">⚠️</div>
+            <span>Outro Problema</span>
+          </div>
+        </div>
+        <input type="hidden" id="selectedCategory" value="">
+      </section>
+
+      <section class="form-section location-section">
+        <h2><span class="sec-icon">2</span> Localização Exata (GPS)</h2>
+        <p class="section-desc">A localização é obtida automaticamente com máxima precisão para garantir que as equipes
+          de manutenção encontrem o problema.</p>
+        <div class="gps-actions" style="margin-bottom: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="obterGPS()">📍 Forçar Localização Exata</button>
+        </div>
+        <div id="map" class="map-container"></div>
+        <div class="coords-display" id="coordsDisplay">Aguardando GPS...</div>
+      </section>
+
+      <section class="form-section photo-section">
+        <h2><span class="sec-icon">3</span> Evidência (Foto)</h2>
+        <div class="camera-wrapper">
+          <video id="camera" autoplay playsinline></video>
+          <canvas id="foto" style="display:none;"></canvas>
+        </div>
+        <div class="botoes-camera">
+          <button class="btn btn-primary" onclick="tirarFoto()" id="btnCapturar">
+            <span class="icon">📸</span> Capturar Foto
+          </button>
+          <button class="btn btn-secondary" onclick="alternarCamera()" id="btnTrocarCam">
+            <span class="icon">🔄</span> Câmera
+          </button>
+          <button class="btn btn-danger hidden" onclick="limparFoto()" id="btnLimparFoto">
+            <span class="icon">🗑️</span> Descartar
+          </button>
+        </div>
+      </section>
+
+      <section class="form-section details-section">
+        <h2><span class="sec-icon">4</span> Detalhes & Envio</h2>
+        <form id="denunciaForm" onsubmit="registrarDenuncia(); return false;">
+          <div class="input-group">
+            <label for="descricao" class="lbl">Descrição Adicional</label>
+            <textarea id="descricao"
+              placeholder="Ex: Buraco muito fundo na faixa da direita, perto da padaria..."></textarea>
+          </div>
+
+          <div class="input-group">
+            <label for="prioridade" class="lbl">Prioridade</label>
+            <div class="priority-selector">
+              <label class="prio-radio low">
+                <input type="radio" name="prioridade" value="Baixa">
+                <span>Baixa</span>
+              </label>
+              <label class="prio-radio medium">
+                <input type="radio" name="prioridade" value="Média" checked>
+                <span>Média</span>
+              </label>
+              <label class="prio-radio high">
+                <input type="radio" name="prioridade" value="Alta">
+                <span>Alta</span>
+              </label>
+              <label class="prio-radio urgent">
+                <input type="radio" name="prioridade" value="Urgente">
+                <span>Urgente</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="whats" class="lbl">WhatsApp do Órgão (opcional)</label>
+            <input type="tel" id="whats" inputmode="tel" placeholder="+55 DDD número (ex.: +5585999999999)" />
+            <span class="help-text">Se preenchido, você pode enviar a denúncia direto pelo WhatsApp.</span>
+          </div>
+
+          <div class="botoes-form">
+            <button type="submit" class="btn btn-submit">
+              <span class="icon">✅</span> Salvar no Histórico
+            </button>
+            <button type="button" class="btn btn-whatsapp" onclick="enviarWhatsApp()">
+              <span class="icon">💬</span> Enviar pelo WhatsApp
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <section class="historico form-section">
+      <div class="historico-header">
+        <h2>📋 Histórico de Denúncias</h2>
+        <select id="filtroHistorico" onchange="renderizarHistorico()">
+          <option value="todas">Todas as categorias</option>
+          <option value="poste">Poste Apagado</option>
+          <option value="buraco">Buraco na Via</option>
+          <option value="dengue">Foco de Dengue</option>
+          <option value="mato">Falta de Roço</option>
+          <option value="outro">Outro Problema</option>
+        </select>
+      </div>
+
+      <div class="historico-vazio" id="historicoVazio">
+        <div class="empty-icon">🍃</div>
+        <p>Nenhuma denúncia registrada ainda.</p>
+      </div>
+
+      <ul id="listaDenuncias" class="denuncias-list"></ul>
+    </section>
   </main>
 
   <footer>
-    <p>&copy; 2025 — Projeto <strong>Cidadão Consciente</strong>. <br>Denúncias anônimas com foco em melhoria pública.</p>
+    <p>&copy; <span id="year"></span> — Projeto <strong>Cidadão Consciente</strong>.</p>
+    <p class="footer-sub">Feito para melhorar nossa cidade, juntos. 🏙️</p>
   </footer>
 
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="script.js"></script>
 </body>
+
 </html>

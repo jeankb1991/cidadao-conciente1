@@ -1,46 +1,112 @@
 // =========================
-//  CONTROLE DE CÂMERA
+//  ESTADO DA APLICAÇÃO
+// =========================
+let state = {
+  categoria: '',
+  lat: null,
+  lng: null,
+  fotoBase64: null,
+  historico: []
+};
+
+// Configuração de categorias
+const catIcons = {
+  poste: { icon: '🔦', label: 'Poste Apagado' },
+  buraco: { icon: '🕳️', label: 'Buraco na Via' },
+  dengue: { icon: '🦟', label: 'Foco de Dengue' },
+  mato: { icon: '🌿', label: 'Falta de Roço' },
+  outro: { icon: '⚠️', label: 'Outro Problema' }
+};
+
+// =========================
+//  INICIALIZAÇÃO
+// =========================
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('year').textContent = new Date().getFullYear();
+  
+  // Setup Categorias
+  setupCategories();
+  
+  // Carregar histórico
+  carregarHistorico();
+  atualizarDashboard();
+  renderizarHistorico();
+  
+  // Iniciar recursos
+  iniciarCamera(true);
+  initMapa();
+});
+
+// =========================
+//  CATEGORIAS
+// =========================
+function setupCategories() {
+  const cards = document.querySelectorAll('.category-card');
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      // Remove active de todos
+      cards.forEach(c => c.classList.remove('active'));
+      // Adiciona no clicado
+      card.classList.add('active');
+      // Salva no state
+      state.categoria = card.dataset.category;
+      document.getElementById('selectedCategory').value = state.categoria;
+    });
+  });
+}
+
+// =========================
+//  CÂMERA
 // =========================
 const video = document.getElementById('camera');
+const canvas = document.getElementById('foto');
 let currentStream = null;
 let usarTraseira = true;
 
 async function iniciarCamera(preferirTraseira = true) {
-  // encerra stream anterior
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
-    currentStream = null;
   }
 
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  
+  const constraints = {
+    audio: false,
+    video: isMobile 
+      ? { facingMode: { ideal: preferirTraseira ? "environment" : "user" } }
+      : true
+  };
+
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === "videoinput");
-
-    let deviceId = null;
-    if (preferirTraseira) {
-      const back = videoDevices.find(d => /back|rear|environment|traseir/i.test(d.label));
-      if (back) deviceId = back.deviceId;
-    } else {
-      const front = videoDevices.find(d => /front|user|frontal/i.test(d.label));
-      if (front) deviceId = front.deviceId;
-    }
-
-    const constraints = {
-      video: deviceId
-        ? { deviceId: { exact: deviceId } }
-        : { facingMode: preferirTraseira ? "environment" : "user" },
-      audio: false
-    };
-
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     currentStream = stream;
-
-    document.getElementById("tipoCamera").textContent =
-      preferirTraseira ? "📷 Câmera: Traseira" : "🤳 Câmera: Frontal";
+    
+    // Tenta ser mais específico no mobile se for traseira
+    if (isMobile && preferirTraseira) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(d => d.kind === "videoinput");
+      const traseira = videoInputs.find(d => /back|traseir|rear|environment/i.test(d.label));
+      
+      if (traseira && traseira.deviceId) {
+        const stream2 = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { deviceId: { exact: traseira.deviceId } }
+        });
+        currentStream.getTracks().forEach(t => t.stop());
+        video.srcObject = stream2;
+        currentStream = stream2;
+      }
+    }
   } catch (err) {
-    console.error("Erro ao iniciar câmera:", err);
-    alert("Erro ao acessar a câmera. Verifique permissões ou recarregue a página.");
+    console.warn("Tentando fallback da câmera", err);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+      currentStream = stream;
+    } catch (e) {
+      alert("Não foi possível acessar a câmera. Verifique as permissões.");
+    }
   }
 }
 
@@ -49,109 +115,291 @@ function alternarCamera() {
   iniciarCamera(usarTraseira);
 }
 
-if (location.protocol === "https:" || location.hostname === "localhost") {
-  iniciarCamera(true);
-} else {
-  alert("⚠️ Acesso à câmera requer HTTPS ou localhost.");
-}
-
-// =========================
-//  CAPTURAR FOTO
-// =========================
 function tirarFoto() {
-  const canvas = document.getElementById('foto');
   const ctx = canvas.getContext('2d');
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  
+  if(canvas.width === 0) return; // Video not ready
+  
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  state.fotoBase64 = canvas.toDataURL("image/jpeg", 0.8);
+  
+  // UI update
+  video.style.display = "none";
   canvas.style.display = "block";
+  document.getElementById('btnCapturar').classList.add('hidden');
+  document.getElementById('btnTrocarCam').classList.add('hidden');
+  document.getElementById('btnLimparFoto').classList.remove('hidden');
+}
+
+function limparFoto() {
+  state.fotoBase64 = null;
+  video.style.display = "block";
+  canvas.style.display = "none";
+  document.getElementById('btnCapturar').classList.remove('hidden');
+  document.getElementById('btnTrocarCam').classList.remove('hidden');
+  document.getElementById('btnLimparFoto').classList.add('hidden');
 }
 
 // =========================
-//  GEOLOCALIZAÇÃO + MAPA
+//  MAPA (Leaflet)
 // =========================
-let LAT = null, LON = null;
+let map, marker;
 
-function initMap(lat, lon) {
-  LAT = lat; LON = lon;
-  const map = document.getElementById("map");
-  map.innerHTML = `<iframe 
-    width="100%" height="100%" frameborder="0" style="border:0"
-    src="https://www.google.com/maps?q=${lat},${lon}&z=17&output=embed"
-    allowfullscreen>
-  </iframe>`;
+function obterGPS() {
+  document.getElementById('coordsDisplay').textContent = "Buscando localização exata...";
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        atualizarLocalizacao(lat, lng, true);
+      },
+      err => {
+        console.warn("Erro geolocalização", err);
+        document.getElementById('coordsDisplay').textContent = "Não foi possível obter GPS exato. Verifique as permissões.";
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  } else {
+    document.getElementById('coordsDisplay').textContent = "Geolocalização não suportada no seu navegador.";
+  }
 }
 
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(
-    pos => initMap(pos.coords.latitude, pos.coords.longitude),
-    err => alert("Erro ao obter localização: " + err.message),
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
-  );
-} else {
-  alert("Geolocalização não suportada.");
+function initMapa() {
+  // Layer do OpenStreetMap (Ruas Padrão)
+  const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  });
+
+  // Layer de Satélite (Esri World Imagery) - Imagens reais e coloridas
+  const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+  });
+
+  // Layer de Relevo (OpenTopoMap)
+  const relevo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap'
+  });
+
+  // Inicializa o mapa centralizado no Brasil, com satélite por padrão
+  map = L.map('map', {
+    center: [-14.235, -51.925],
+    zoom: 4,
+    layers: [satelite]
+  });
+
+  const baseMaps = {
+    "Satélite (Realista)": satelite,
+    "Ruas (Padrão)": ruas,
+    "Relevo (Topografia)": relevo
+  };
+
+  L.control.layers(baseMaps).addTo(map);
+
+  // Tenta obter geolocalização do usuário exata
+  obterGPS();
 }
 
-// =========================
-//  REGISTRAR DENÚNCIA
-// =========================
-function registrarDenuncia() {
-  const canvas = document.getElementById("foto");
-  const descricao = document.getElementById("descricao").value.trim();
-  const lista = document.getElementById("listaDenuncias");
+function atualizarLocalizacao(lat, lng, centralizar = false) {
+  state.lat = lat;
+  state.lng = lng;
 
-  if (canvas.style.display === "none") {
-    alert("Por favor, tire uma foto antes de registrar.");
-    return;
+  if (centralizar) {
+    map.setView([lat, lng], 18); // Zoom máximo para exibir o local exato
   }
 
-  const imagem = canvas.toDataURL("image/png");
-  const agora = new Date().toLocaleString();
-  const coordsTxt = (LAT && LON) ? `${LAT.toFixed(6)}, ${LON.toFixed(6)}` : "Não disponível";
-  const linkMaps = (LAT && LON) ? `https://maps.google.com/?q=${LAT},${LON}&z=17` : "#";
+  if (marker) {
+    marker.setLatLng([lat, lng]);
+  } else {
+    marker = L.marker([lat, lng], { draggable: false }).addTo(map);
+  }
 
-  const item = document.createElement("li");
-  item.innerHTML = `
-    <img src="${imagem}" width="160" alt="Foto registrada"><br>
-    <strong>Descrição:</strong> ${descricao || "Não informada"}<br>
-    <strong>Localização:</strong> ${coordsTxt} 
-    ${LAT ? `— <a href="${linkMaps}" target="_blank">Abrir no mapa</a>` : ""}<br>
-    <strong>Data/Hora:</strong> ${agora}
-  `;
-  lista.appendChild(item);
-  document.getElementById("denunciaForm").reset();
+  document.getElementById('coordsDisplay').textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
 }
 
 // =========================
-//  ENVIAR PELO WHATSAPP
+//  DADOS E HISTÓRICO
 // =========================
-function normalizarNumeroWhats(numero) {
-  numero = (numero || "").trim();
-  if (!numero) return "";
-  if (numero.startsWith("+")) return "+" + numero.replace(/[^\d]/g, "");
-  return numero.replace(/[^\d]/g, "");
+function salvarHistorico() {
+  localStorage.setItem('cidadaoConscienteData', JSON.stringify(state.historico));
+  atualizarDashboard();
+  renderizarHistorico();
+}
+
+function carregarHistorico() {
+  const data = localStorage.getItem('cidadaoConscienteData');
+  if (data) {
+    try {
+      state.historico = JSON.parse(data);
+    } catch (e) {
+      state.historico = [];
+    }
+  }
+}
+
+function atualizarDashboard() {
+  const contagens = { poste: 0, buraco: 0, dengue: 0, mato: 0, outro: 0 };
+  
+  state.historico.forEach(item => {
+    if(contagens[item.categoria] !== undefined) {
+      contagens[item.categoria]++;
+    } else {
+      contagens.outro++;
+    }
+  });
+
+  document.getElementById('count-poste').textContent = contagens.poste;
+  document.getElementById('count-buraco').textContent = contagens.buraco;
+  document.getElementById('count-dengue').textContent = contagens.dengue;
+  document.getElementById('count-mato').textContent = contagens.mato;
+}
+
+function renderizarHistorico() {
+  const lista = document.getElementById('listaDenuncias');
+  const vazio = document.getElementById('historicoVazio');
+  const filtro = document.getElementById('filtroHistorico').value;
+  
+  lista.innerHTML = '';
+  
+  let filtrados = state.historico;
+  if (filtro !== 'todas') {
+    filtrados = state.historico.filter(i => i.categoria === filtro);
+  }
+
+  if (filtrados.length === 0) {
+    vazio.style.display = 'block';
+  } else {
+    vazio.style.display = 'none';
+    
+    // Sort desc (mais novos primeiro)
+    filtrados.sort((a, b) => b.timestamp - a.timestamp).forEach(item => {
+      const date = new Date(item.timestamp).toLocaleString('pt-BR');
+      const catInfo = catIcons[item.categoria] || catIcons.outro;
+      const mapLink = `https://maps.google.com/?q=${item.lat},${item.lng}`;
+      
+      const li = document.createElement('li');
+      li.className = 'denuncia-card';
+      
+      li.innerHTML = `
+        ${item.foto ? `<img src="${item.foto}" alt="Foto da denúncia" loading="lazy">` : ''}
+        <div class="denuncia-content">
+          <div class="denuncia-header">
+            <span class="denuncia-badge ${item.categoria}">
+              ${catInfo.icon} ${catInfo.label}
+            </span>
+            <span class="denuncia-prio ${item.prioridade}">${item.prioridade}</span>
+          </div>
+          
+          <p class="denuncia-desc">${item.descricao || "Sem descrição adicional."}</p>
+          
+          <div class="denuncia-meta">
+            <span>📍 ${item.lat.toFixed(5)}, ${item.lng.toFixed(5)} — <a href="${mapLink}" target="_blank">Abrir Mapa</a></span>
+            <span>🕒 ${date}</span>
+            <button class="btn-delete-hist" onclick="apagarDenuncia(${item.id})">Apagar Registro</button>
+          </div>
+        </div>
+      `;
+      lista.appendChild(li);
+    });
+  }
+}
+
+function apagarDenuncia(id) {
+  if(confirm("Deseja realmente apagar este registro do seu histórico local?")) {
+    state.historico = state.historico.filter(i => i.id !== id);
+    salvarHistorico();
+  }
+}
+
+// =========================
+//  AÇÕES DE FORMULÁRIO
+// =========================
+function registrarDenuncia() {
+  if (!state.categoria) {
+    alert("Por favor, selecione qual é o problema (passo 1).");
+    return;
+  }
+  
+  if (!state.lat || !state.lng) {
+    alert("Por favor, aguarde a localização exata do GPS para continuar.");
+    return;
+  }
+  
+  if (!state.fotoBase64) {
+    if(!confirm("Você não capturou uma foto. Deseja registrar mesmo assim?")) {
+      return;
+    }
+  }
+
+  const descricao = document.getElementById("descricao").value.trim();
+  const prioridade = document.querySelector('input[name="prioridade"]:checked').value;
+  
+  const novaDenuncia = {
+    id: Date.now(),
+    timestamp: Date.now(),
+    categoria: state.categoria,
+    lat: state.lat,
+    lng: state.lng,
+    foto: state.fotoBase64,
+    descricao: descricao,
+    prioridade: prioridade
+  };
+
+  state.historico.push(novaDenuncia);
+  salvarHistorico();
+  
+  // Limpar form
+  limparFormulario();
+  alert("Denúncia salva no histórico com sucesso!");
+  
+  // Scroll para histórico
+  document.querySelector('.historico').scrollIntoView({ behavior: 'smooth' });
+}
+
+function limparFormulario() {
+  document.getElementById("denunciaForm").reset();
+  limparFoto();
+  // Resetar categoria visualmente
+  document.querySelectorAll('.category-card').forEach(c => c.classList.remove('active'));
+  state.categoria = '';
+  document.getElementById('selectedCategory').value = '';
 }
 
 function enviarWhatsApp() {
-  const descricao = (document.getElementById("descricao").value || "").trim();
-  const numero = normalizarNumeroWhats(document.getElementById("whats").value);
-
-  if (!numero) {
-    alert("Informe um número de WhatsApp válido (ex.: +5585999999999).");
+  if (!state.categoria || !state.lat) {
+    alert("Selecione a categoria e aguarde a localização antes de enviar.");
     return;
   }
 
-  const dataHora = new Date().toLocaleString();
-  const coordsTxt = (LAT && LON) ? `${LAT.toFixed(6)}, ${LON.toFixed(6)}` : "Não disponível";
-  const linkMaps = (LAT && LON) ? `https://maps.google.com/?q=${LAT},${LON}&z=17` : "";
+  let numero = document.getElementById("whats").value.replace(/[^\d+]/g, "");
+  if (!numero) {
+    // Numero fallback generico se o usuario nao preencheu, porem para wa.me é bom ter.
+    // Se nao tiver, abre a seleção de contatos.
+    numero = ""; 
+  }
 
-  const mensagem =
-`Denúncia — Cidadão Consciente
-Descrição: ${descricao || "Não informada"}
-Localização: ${coordsTxt}
-Mapa: ${linkMaps || "N/A"}
-Data/Hora: ${dataHora}`;
+  const catInfo = catIcons[state.categoria] || catIcons.outro;
+  const descricao = document.getElementById("descricao").value.trim();
+  const prioridade = document.querySelector('input[name="prioridade"]:checked').value;
+  const mapLink = `https://maps.google.com/?q=${state.lat},${state.lng}`;
+  const data = new Date().toLocaleString('pt-BR');
 
-  const url = `https://wa.me/${encodeURIComponent(numero)}?text=${encodeURIComponent(mensagem)}`;
+  const texto = 
+`🚨 *Denúncia Cidadão Consciente*
+*Problema:* ${catInfo.icon} ${catInfo.label}
+*Prioridade:* ${prioridade}
+
+*Descrição:* ${descricao || "Nenhuma"}
+
+📍 *Localização:*
+${mapLink}
+
+🕒 ${data}
+
+_(Foto anexada manualmente, se aplicável)_`;
+
+  const url = `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
   window.open(url, "_blank");
 }
